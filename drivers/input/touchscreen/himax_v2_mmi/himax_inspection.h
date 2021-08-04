@@ -24,18 +24,13 @@
 #define HX_RSLT_OUT_PATH "/sdcard/"
 #define HX_RSLT_OUT_FILE "hx_test_result.txt"
 #define PI(x...) pr_info(x)
-#define PD(x...) pr_debug(x)
 
 #ifdef HX_ESD_RECOVERY
 	extern u8 HX_ESD_RESET_ACTIVATE;
 #endif
-#ifdef HX_112F_SET
-#define BS_RAWDATA	8
-#define BS_NOISE	8
-#else
+
 #define BS_RAWDATA	10
 #define BS_NOISE	10
-#endif
 #define BS_OPENSHORT	0
 #define	BS_LPWUG	1
 #define	BS_LPWUG_dile	1
@@ -49,12 +44,8 @@
 /* TX+SKIP_NOTCH_END*/
 #define SKIP_DUMMY_END 28
 
-#ifdef HX_112F_SET
-#define	NOISEFRAME	60
-#else
-#define	NOISEFRAME	(BS_NOISE+1)
-#endif
 
+#define	NOISEFRAME	(BS_NOISE+1)
 #define NORMAL_IDLE_RAWDATA_NOISEFRAME 10
 #define LPWUG_RAWDATAFRAME 1
 #define LPWUG_NOISEFRAME 1

@@ -33,7 +33,6 @@
 #define MASK_BIT_0 0x01
 #define MASK_BIT_1 0x02
 #define MASK_BIT_2 0x04
-#define PACKET_MAX_SZ 4096
 
 #define FW_SECTOR_PER_BLOCK			8
 #define FW_PAGE_PER_SECTOR			64
@@ -43,7 +42,6 @@
 #define HX_32K_SZ 0x8000
 #define HX_40K_SZ 0xA000
 #define HX_48K_SZ 0xC000
-#define HX1K 0x400
 #define HX64K	0x10000
 #define HX124K	0x1f000
 #define HX4000K	0x1000000
@@ -60,6 +58,15 @@
 
 #if defined(__HIMAX_HX852xH_MOD__)
 #define HX_MOD_KSYM_HX852xH            HX_MOD_KSYM_HX852xH
+#endif
+
+#if defined(__HIMAX_HX83102_MOD__)
+#define HX_MOD_KSYM_HX83102            HX_MOD_KSYM_HX83102
+#endif
+
+#if defined(__HIMAX_HX83102D_MOD__)
+#define HX_MOD_KSYM_HX83102            HX_MOD_KSYM_HX83102
+#define HX83102D
 #endif
 
 #if defined(__HIMAX_HX83103_MOD__)
@@ -938,9 +945,6 @@ struct himax_core_fp {
 	void (*fp_diag_parse_raw_data)(struct himax_report_data *hx_touch_data, int mul_num, int self_num, uint8_t diag_cmd, int32_t *mutual_data, int32_t *self_data);
 	void (*fp_ic_reset)(uint8_t loadconfig, uint8_t int_off);
 	int (*fp_ic_esd_recovery)(int hx_esd_event, int hx_zero_event, int length);
-#if defined(HX_112F_SET)
-	void (*_esd_ic_dd_reset)(void);
-#endif
 	void (*fp_esd_ic_reset)(void);
 	void (*fp_resend_cmd_func)(bool suspended);
 #ifdef HX_TP_PROC_GUEST_INFO
@@ -957,7 +961,7 @@ struct himax_core_fp {
 	int (*fp_0f_op_file_dirly)(char *file_name);
 	void (*fp_0f_operation)(struct work_struct *work);
 	int (*fp_0f_esd_check)(void);
-#if defined(HX83102D) || defined(HX_112F_SET)
+#if defined(HX83102D)
 	void (*fp_0f_reload_to_active)(void);
 #endif
 #ifdef HX_0F_DEBUG

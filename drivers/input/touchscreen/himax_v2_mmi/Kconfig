@@ -57,25 +57,25 @@ config HMX_DB
 	  This enables support for HIMAX driver test over Dragon Board.
 
 config TOUCHSCREEN_HIMAX_ENABLE_PALM
-	tristate "HIMAX inspect function"
+	tristate "HIMAX palm function"
 	depends on TOUCHSCREEN_HIMAX_SPI
 	help
 	  This enables support for HIMAX palm function.
 
 config TOUCHSCREEN_HIMAX_ENABLE_DOUBLE_TAP
-	tristate "HIMAX inspect function"
+	tristate "HIMAX double tap function"
 	depends on TOUCHSCREEN_HIMAX_SPI
 	help
 	  This enables support for HIMAX double tap function.
 
 config TOUCHSCREEN_HIMAX_ENABLE_MULTI_BIN
-	tristate "HIMAX inspect function"
+	tristate "HIMAX multi bin function"
 	depends on TOUCHSCREEN_HIMAX_SPI
 	help
 	  This enables support for HIMAX multi bin function.
 
 config TOUCHSCREEN_HIMAX_PANEL_NOTIFICATIONS
-	tristate "HIMAX inspect function"
+	tristate "HIMAX panel notification function"
 	depends on TOUCHSCREEN_HIMAX_SPI
 	help
 	  This enables support for HIMAX notification function.

@@ -487,64 +487,6 @@ static void himax_mcu_dd_reg_en(bool enable)
 	g_core_fp.fp_dd_reg_write(0xB9, 0, 4, data, 0);
 }
 
-#ifdef FIX_WVLA
-static bool himax_mcu_dd_reg_write(uint8_t addr, uint8_t pa_num, int len, uint8_t *data, uint8_t bank)
-{
-	/*Calculate total write length*/
-	uint32_t data_len = (((len + pa_num - 1) / 4 - pa_num / 4) + 1) * 4;
-	uint8_t *w_data = NULL;
-	uint8_t tmp_addr[4] = {0};
-	uint8_t tmp_data[4] = {0};
-	bool *chk_data = NULL;
-	uint32_t chk_idx = 0;
-	int i = 0;
-	int ret = -1;
-
-	w_data = kcalloc(data_len, sizeof(uint8_t), GFP_KERNEL);
-	if (w_data == NULL) {
-		E("%s, Failed to allocate memory\n", __func__);
-	}
-
-	chk_data = kcalloc(data_len, sizeof(bool), GFP_KERNEL);
-	if (chk_data == NULL) {
-		E("%s, Failed to allocate memory\n", __func__);
-	}
-	if (!w_data || !chk_data)
-		goto alloc_error;
-
-	/*put input data*/
-	chk_idx = pa_num % 4;
-	for (i = 0; i < len; i++) {
-		w_data[chk_idx] = data[i];
-		chk_data[chk_idx++] = true;
-	}
-
-	/*get original data*/
-	chk_idx = (pa_num / 4) * 4;
-	for (i = 0; i < data_len; i++) {
-		if (!chk_data[i]) {
-			g_core_fp.fp_dd_reg_read(addr, (uint8_t)(chk_idx + i), 1, tmp_data, bank);
-			w_data[i] = tmp_data[0];
-			chk_data[i] = true;
-		}
-		D("%s w_data[%d] = %2X\n", __func__, i, w_data[i]);
-	}
-
-	tmp_addr[3] = 0x30;
-	tmp_addr[2] = addr >> 4;
-	tmp_addr[1] = (addr << 4) | (bank * 4);
-	tmp_addr[0] = chk_idx;
-	D("%s Addr = %02X%02X%02X%02X.\n", __func__, tmp_addr[3], tmp_addr[2], tmp_addr[1], tmp_addr[0]);
-	ret = g_core_fp.fp_register_write(tmp_addr, data_len, w_data, 0);
-alloc_error:
-	if (chk_data)
-		kfree(chk_data);
-	if (w_data)
-		kfree(w_data);
-
-	return (ret == NO_ERR);
-}
-#else
 static bool himax_mcu_dd_reg_write(uint8_t addr, uint8_t pa_num, int len, uint8_t *data, uint8_t bank)
 {
 	/*Calculate total write length*/
@@ -584,7 +526,6 @@ static bool himax_mcu_dd_reg_write(uint8_t addr, uint8_t pa_num, int len, uint8_
 	D("%s Addr = %02X%02X%02X%02X.\n", __func__, tmp_addr[3], tmp_addr[2], tmp_addr[1], tmp_addr[0]);
 	return (g_core_fp.fp_register_write(tmp_addr, data_len, w_data, 0) == NO_ERR);
 }
-#endif
 
 static bool himax_mcu_dd_reg_read(uint8_t addr, uint8_t pa_num, int len, uint8_t *data, uint8_t bank)
 {
@@ -2085,21 +2026,13 @@ static void himax_mcu_pin_reset(void)
 	I("%s: Now reset the Touch chip,private_ts->vdd_1v8_always_on = %d \n",
 		__func__,private_ts->vdd_1v8_always_on);
 	himax_rst_gpio_set(private_ts->rst_gpio, 0);
-#if defined(__HIMAX_HX83102_MOD__)
-	msleep(5);
-#else
 	if(private_ts->vdd_1v8_always_on)
 		msleep(10);
 	else
 		msleep(20);
-#endif
 	himax_rst_gpio_set(private_ts->rst_gpio, 1);
 #ifdef HX_ZERO_FLASH
-#if defined(__HIMAX_HX83102_MOD__)
- 	msleep(2);
-#else
 		msleep(10);
-#endif
 #else
 		msleep(50);
 #endif
@@ -2209,14 +2142,6 @@ static void himax_mcu_touch_information(void)
 		if (err_cnt > 0)
 			E("TP Info from IC is wrong, err_cnt = 0x%X", err_cnt);
 	}
-#else
-	ic_data->HX_RX_NUM = FIX_HX_RX_NUM;
-	ic_data->HX_TX_NUM = FIX_HX_TX_NUM;
-	ic_data->HX_MAX_PT = FIX_HX_MAX_PT;
-	ic_data->HX_XY_REVERSE = FIX_HX_XY_REVERSE;
-	ic_data->HX_Y_RES = FIX_HX_X_RES;
-	ic_data->HX_X_RES = FIX_HX_Y_RES;
-	ic_data->HX_INT_IS_EDGE = FIX_HX_INT_IS_EDGE;
 
 #endif
 	I("%s:HX_RX_NUM =%d,HX_TX_NUM =%d,HX_MAX_PT=%d\n", __func__, ic_data->HX_RX_NUM, ic_data->HX_TX_NUM, ic_data->HX_MAX_PT);
@@ -2700,7 +2625,6 @@ int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_in
 	uint32_t dsram_base = 0xFFFFFFFF;
 	uint32_t dsram_max = 0;
 	int cfg_sz = 0;
-
 #if defined(HX_CODE_OVERLAY)
 	uint8_t j = 0;
 	int allovlidx = 0;
@@ -2835,7 +2759,6 @@ int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_in
 #else
 int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_info_arr, uint8_t *FW_buf, uint8_t *sram_min, uint8_t *ovl_sidx)
 {
-	bool flag_1k_header = false;
 	int part_num = 0;
 	int i = 0;
 	uint8_t buf[16];
@@ -2847,28 +2770,9 @@ int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_in
 	/*int different = 0;*/
 	/*int j = 0;*/
 
-	/*0. check 1k header*/
-	if (fw_entry->data[0x00] == 0x00
-		&& fw_entry->data[0x01] == 0x00
-		&& fw_entry->data[0x02] == 0x00
-		&& fw_entry->data[0x03] == 0x00
-		&& fw_entry->data[0x04] == 0x00
-		&& fw_entry->data[0x05] == 0x00
-		&& fw_entry->data[0x06] == 0x00
-		&& fw_entry->data[0x07] == 0x00
-		&& fw_entry->data[0x0E] == 0x87)
-		flag_1k_header = true;
-	else
-		flag_1k_header = false;
-
 	/*1. get number of partition*/
-	if(flag_1k_header == true)
-		part_num = fw_entry->data[HX64K + HX1K + 12];
-	else
-		part_num = fw_entry->data[HX64K + 12];
-
-	//I("%s, Number of partition is %d\n", __func__, part_num);
-	I("%s, Number of partition is %d, flag_1k_header=%d\n", __func__, part_num, flag_1k_header);
+	part_num = fw_entry->data[HX64K + 12];
+	I("%s, Number of partition is %d\n", __func__, part_num);
 	if (part_num <= 1) {
 		E("%s, size of cfg part failed! part_num = %d\n", __func__, part_num);
 		return LENGTH_FAIL;
@@ -2882,11 +2786,7 @@ int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_in
 	/* i = 0 is fw entity, it need to update by itself*/
 	for (i = 1; i < part_num; i++) {
 		/*3. get all partition*/
-		if(flag_1k_header == true)
-			memcpy(buf, &fw_entry->data[i * 0x10 + HX64K + HX1K], 16);
-		else
-			memcpy(buf, &fw_entry->data[i * 0x10 + HX64K], 16);
-
+		memcpy(buf, &fw_entry->data[i * 0x10 + HX64K], 16);
 		memcpy(zf_info_arr[i].sram_addr, buf, 4);
 		zf_info_arr[i].write_size = buf[7] << 24 | buf[6] << 16 | buf[5] << 8 | buf[4];
 		zf_info_arr[i].fw_addr = buf[11] << 24 | buf[10] << 16 | buf[9] << 8 | buf[8];
@@ -2959,15 +2859,10 @@ int hx_parse_bin_cfg_data(const struct firmware *fw_entry, struct zf_info *zf_in
 
 int himax_zf_part_info(const struct firmware *fw_entry)
 {
-	bool flag_1k_header = false;
 	int part_num = fw_entry->data[HX64K + 12];
 	int ret = 0;
 	uint8_t buf[16];
-#ifdef FIX_WVLA
-	struct zf_info *zf_info_arr;
-#else
 	struct zf_info zf_info_arr[part_num];
-#endif
 	uint8_t *FW_buf;
 	uint8_t sram_min[4];
 	int cfg_crc_sw = 0;
@@ -2992,37 +2887,15 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 #endif
 #endif
 #endif
-	/*0. check 1k header*/
-	if (fw_entry->data[0x00] == 0x00
-		&& fw_entry->data[0x01] == 0x00
-		&& fw_entry->data[0x02] == 0x00
-		&& fw_entry->data[0x03] == 0x00
-		&& fw_entry->data[0x04] == 0x00
-		&& fw_entry->data[0x05] == 0x00
-		&& fw_entry->data[0x06] == 0x00
-		&& fw_entry->data[0x07] == 0x00
-		&& fw_entry->data[0x0E] == 0x87)
-		flag_1k_header = true;
-	else
-		flag_1k_header = false;
-
-	/*1. get number of partition*/
-	if(flag_1k_header == true)
-		part_num = fw_entry->data[HX64K + HX1K + 12];
-	else
-		part_num = fw_entry->data[HX64K + 12];
 
 	/*1. get number of partition*/
 	/*part_num = fw_entry->data[HX64K + 12];*/
-	//I("%s, Number of partition is %d\n", __func__, part_num);
-	I("%s, Number of partition is %d, flag_1k_header=%d\n", __func__, part_num, flag_1k_header);
+	I("%s, Number of partition is %d\n", __func__, part_num);
 	if (part_num <= 0)
 		part_num = 1;
 
 	/*2. initial struct of array*/
-#ifdef FIX_WVLA
-	zf_info_arr = kcalloc(part_num, sizeof(struct zf_info), GFP_KERNEL);
-#endif
+	/*zf_info_arr = kcalloc(part_num, sizeof(struct zf_info), GFP_KERNEL);*/
 	if (zf_info_arr == NULL) {
 		E("%s, Allocate ZF info array failed!\n", __func__);
 		ret =  MEM_ALLOC_FAIL;
@@ -3052,10 +2925,7 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 		I("Now cfg_crc_sw=%X\n", cfg_crc_sw);
 	}
 	/*Fw Entity*/
-	if(flag_1k_header == true)
-		memcpy(buf, &fw_entry->data[0 * 0x10 + HX64K + HX1K], 16);
-	else
-		memcpy(buf, &fw_entry->data[0 * 0x10 + HX64K], 16);	
+	memcpy(buf, &fw_entry->data[0 * 0x10 + HX64K], 16);
 	memcpy(zf_info_arr[0].sram_addr, buf, 4);
 	zf_info_arr[0].write_size = buf[7] << 24 | buf[6] << 16 | buf[5] << 8 | buf[4];
 	zf_info_arr[0].fw_addr = buf[11] << 24 | buf[10] << 16 | buf[9] << 8 | buf[8];
@@ -3183,9 +3053,7 @@ int himax_zf_part_info(const struct firmware *fw_entry)
 END_FUNC:
 	kfree(FW_buf);
 ALOC_FW_BUF_FAIL:
-#ifdef FIX_WVLA
-	kfree(zf_info_arr);
-#endif
+	/*kfree(zf_info_arr);*/
 ALOC_ZF_INFO_ARR_FAIL:
 	return ret;
 }

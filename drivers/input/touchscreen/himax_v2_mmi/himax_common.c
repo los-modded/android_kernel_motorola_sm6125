@@ -264,11 +264,6 @@ static void himax_ts_early_suspend(struct early_suspend *h);
 static void himax_ts_late_resume(struct early_suspend *h);
 #endif
 
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-int panel_notifier_callback(struct notifier_block *self,
-						unsigned long event, void *data);
-#endif
-
 #ifdef HX_GESTURE_TRACK
 	static int gest_pt_cnt;
 	static int gest_pt_x[GEST_PT_MAX_NUM];
@@ -1551,24 +1546,11 @@ static void himax_wake_event_report(void)
 
 	if (KEY_EVENT) {
 #ifdef HIMAX_V2_SENSOR_EN
-		if (private_ts->report_gesture_key) {
-			input_report_key(private_ts->sensor_pdata->input_sensor_dev, KEY_F1, 1);
-			input_sync(private_ts->sensor_pdata->input_sensor_dev);
-			input_report_key(private_ts->sensor_pdata->input_sensor_dev, KEY_F1, 0);
-			input_sync(private_ts->sensor_pdata->input_sensor_dev);
-			++report_cnt;
-		} else {
-			input_report_abs(private_ts->sensor_pdata->input_sensor_dev, ABS_DISTANCE, ++report_cnt);
-			input_sync(private_ts->sensor_pdata->input_sensor_dev);
-		}
+		input_report_abs(private_ts->sensor_pdata->input_sensor_dev, ABS_DISTANCE, ++report_cnt);
 		I("input report: %d", report_cnt);
 		if (report_cnt >= REPORT_MAX_COUNT)
 			report_cnt = 0;
-#ifdef CONFIG_HAS_WAKELOCK
-		wake_lock_timeout(&private_ts->tap_gesture_wakelock, msecs_to_jiffies(5000));
-#else
-		__pm_wakeup_event(&private_ts->tap_gesture_wakelock, 5000);
-#endif
+		input_sync(private_ts->sensor_pdata->input_sensor_dev);
 #else
 		I(" %s SMART WAKEUP KEY event %d press\n", __func__, KEY_EVENT);
 		input_report_key(private_ts->input_dev, KEY_EVENT, 1);
@@ -3085,16 +3067,10 @@ static int himax_tap_detect_sensor_init(struct himax_ts_data *data)
 	}
 	data->sensor_pdata = sensor_pdata;
 
+	__set_bit(EV_ABS, sensor_input_dev->evbit);
 	__set_bit(EV_SYN, sensor_input_dev->evbit);
-
-	if (data->report_gesture_key) {
-		__set_bit(EV_KEY, sensor_input_dev->evbit);
-		__set_bit(KEY_F1, sensor_input_dev->keybit);
-	} else {
-		__set_bit(EV_ABS, sensor_input_dev->evbit);
-		input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
-				0, REPORT_MAX_COUNT, 0, 0);
-	}
+	input_set_abs_params(sensor_input_dev, ABS_DISTANCE,
+			0, REPORT_MAX_COUNT, 0, 0);
 	sensor_input_dev->name = "double-tap";
 	data->sensor_pdata->input_sensor_dev = sensor_input_dev;
 
@@ -3112,12 +3088,6 @@ static int himax_tap_detect_sensor_init(struct himax_ts_data *data)
 				&sensor_pdata->ps_cdev);
 	if (err)
 		goto unregister_sensor_input_device;
-
-#ifdef CONFIG_HAS_WAKELOCK
-	wake_lock_init(&data->tap_gesture_wakelock, WAKE_LOCK_SUSPEND, "dt-wake-lock");
-#else
-	wakeup_source_init(&data->tap_gesture_wakelock, "dt-wake-lock");
-#endif
 
 	return 0;
 
@@ -3138,11 +3108,6 @@ int himax_tap_detect_sensor_remove(struct himax_ts_data *data)
 	input_unregister_device(data->sensor_pdata->input_sensor_dev);
 	devm_kfree(&data->sensor_pdata->input_sensor_dev->dev,
 		data->sensor_pdata);
-#ifdef CONFIG_HAS_WAKELOCK
-	wake_lock_destroy(&data->tap_gesture_wakelock);
-#else
-	wakeup_source_trash(&data->tap_gesture_wakelock);
-#endif
 	data->sensor_pdata = NULL;
 	return 0;
 }
@@ -3307,23 +3272,6 @@ static int hx_chk_flash_sts(void)
 }
 #endif
 
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-static void himax_panel_register(struct work_struct *work)
-{
-	int ret = 0;
-
-	struct himax_ts_data *ts = container_of(work, struct himax_ts_data, work_panel.work);
-
-	I("%s in\n", __func__);
-
-	ts->panel_notif.notifier_call = panel_notifier_callback;
-	ret = register_panel_notifier(&ts->panel_notif);
-
-	if (ret)
-		E("Unable to register panel_notifier: %d\n", ret);
-}
-#endif
-
 #if defined(CONFIG_DRM)
 static void himax_fb_register(struct work_struct *work)
 {
@@ -3384,25 +3332,9 @@ static ssize_t vendor_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "himax");
 }
 
-/* Attribute: vendor (RO) */
-static ssize_t ic_ver_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct himax_ts_data *ts = dev_get_drvdata(dev);
-	int buildid;
-
-	buildid = (ic_data->vendor_cid_maj_ver << 8 |
-				ic_data->vendor_cid_min_ver);
-	return scnprintf(buf, PAGE_SIZE, "%s%s\n%s%04x\n%s%04x\n",
-			"Product ID: ", ts->chip_name,
-			"Build ID: ", buildid ? buildid : ts->build_id,
-			"Config ID: ", ic_data->vendor_touch_cfg_ver ? ic_data->vendor_touch_cfg_ver : ts->config_id);
-}
-
 static struct device_attribute touchscreen_attributes[] = {
 	__ATTR_RO(path),
 	__ATTR_RO(vendor),
-	__ATTR_RO(ic_ver),
 	__ATTR_NULL
 };
 
@@ -3433,15 +3365,9 @@ static int himax_sysfs_touchscreen(
 			return error;
 		}
 
-#ifdef HX_112F_SET
-		ts_class_dev = device_create(touchscreen_class, NULL,
-				MKDEV(INPUT_MAJOR, minor),
-				ts, "%s", ts->chip_name);
-#else
 		ts_class_dev = device_create(touchscreen_class, NULL,
 				MKDEV(INPUT_MAJOR, minor),
 				ts, ts->chip_name);
-#endif
 		if (IS_ERR(ts_class_dev)) {
 			error = PTR_ERR(ts_class_dev);
 			ts_class_dev = NULL;
@@ -3598,17 +3524,11 @@ int himax_chip_common_init(void)
 		E("%s: alloc i_CTPM_firmware_name failed\n", __func__);
 		goto firmware_name_alloc_failed;
 	}
-
-#if defined(HX_112F_SET)
-	snprintf(i_CTPM_firmware_name, HIMAX_FILE_NAME_LENGTH, "%s_Himax_firmware.bin",
-		pdata->panel_supplier);
-#else
 	if (pdata->panel_supplier)
 		snprintf(i_CTPM_firmware_name, HIMAX_FILE_NAME_LENGTH, "%s_Himax_firmware.bin",
 			pdata->panel_supplier);
 	else
 		snprintf(i_CTPM_firmware_name, HIMAX_FILE_NAME_LENGTH, "Himax_firmware.bin");
-#endif
 
 	g_hx_chip_inited = 0;
 	idx = himax_get_ksym_idx();
@@ -3693,11 +3613,7 @@ FW_force_upgrade:
 		E("%s: create ts_resume workqueue failed\n", __func__);
 		goto err_create_ts_resume_wq_failed;
 	}
-#if defined(__HIMAX_HX83102D_MOD__)
-	INIT_DELAYED_WORK(&ts->ts_int_work, himax_resume_work_func);
-#else
 	INIT_WORK(&ts->ts_int_work, himax_resume_work_func);
-#endif
 #endif
 	/*Himax Power On and Load Config*/
 	if (himax_loadSensorConfig(pdata)) {
@@ -3762,19 +3678,6 @@ FW_force_upgrade:
 
 	INIT_DELAYED_WORK(&ts->work_att, himax_fb_register);
 	queue_delayed_work(ts->himax_att_wq, &ts->work_att, msecs_to_jiffies(15000));
-#endif
-
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-	ts->himax_panel_wq = create_singlethread_workqueue("HMX_panel_reuqest");
-
-	if (!ts->himax_panel_wq) {
-		E(" allocate himax_panel_wq failed\n");
-		err = -ENOMEM;
-		goto err_panel_notifier_reg_failed;
-	}
-
-	INIT_DELAYED_WORK(&ts->work_panel, himax_panel_register);
-	queue_delayed_work(ts->himax_panel_wq, &ts->work_panel, msecs_to_jiffies(15000));
 #endif
 
 #ifdef HX_SMART_WAKEUP
@@ -3846,11 +3749,6 @@ err_report_data_init_failed:
 #ifdef HX_SMART_WAKEUP
 	wakeup_source_trash(&ts->ts_SMWP_wake_lock);
 #endif
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-	cancel_delayed_work_sync(&ts->work_panel);
-	destroy_workqueue(ts->himax_panel_wq);
-err_panel_notifier_reg_failed:
-#endif
 #if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	cancel_delayed_work_sync(&ts->work_att);
 	destroy_workqueue(ts->himax_att_wq);
@@ -3860,11 +3758,7 @@ err_input_register_device_failed:
 	input_free_device(ts->input_dev);
 err_detect_failed:
 #ifdef HX_RESUME_SET_FW
-#if defined(__HIMAX_HX83102D_MOD__)
-	cancel_delayed_work_sync(&ts->ts_int_work);
-#else
 	cancel_work_sync(&ts->ts_int_work);
-#endif
 	destroy_workqueue(ts->ts_int_workqueue);
 err_create_ts_resume_wq_failed:
 #endif
@@ -3939,12 +3833,6 @@ void himax_chip_common_deinit(void)
 	cancel_delayed_work_sync(&ts->work_att);
 	destroy_workqueue(ts->himax_att_wq);
 #endif
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-	if (unregister_panel_notifier(&ts->panel_notif))
-		E("Error occurred while unregistering panel_notifier.\n");
-	cancel_delayed_work_sync(&ts->work_panel);
-	destroy_workqueue(ts->himax_panel_wq);
-#endif
 	input_free_device(ts->input_dev);
 #ifdef HX_ZERO_FLASH
 	cancel_delayed_work_sync(&ts->work_0f_update);
@@ -3975,13 +3863,6 @@ void himax_chip_common_deinit(void)
 
 int _himax_chip_common_suspend(struct himax_ts_data *ts)
 {
-#if defined(HX_SMART_WAKEUP) && defined(HX_112F_SET)
-		int retry = 0;
-		uint8_t tmp_addr[DATA_LEN_4] = {0};
-		uint8_t tmp_data[DATA_LEN_4] = {0};
-		uint8_t rec_data[DATA_LEN_4] = {0};
-#endif
-
 	if (ts->suspended) {
 		I("%s: Already suspended. Skipped.\n", __func__);
 		goto END;
@@ -4018,39 +3899,6 @@ int _himax_chip_common_suspend(struct himax_ts_data *ts)
 			g_core_fp.fp_0f_overlay(2, 0);
 #endif
 
-#ifdef HX_112F_SET
-		I("SMWP Condition!\n");
-		himax_int_enable(0);
-
-#ifdef HX_RST_PIN_FUNC
-		g_core_fp.fp_ic_reset(false, false);
-#else
-		g_core_fp.fp_system_reset();
-#endif
-
-		I("%s:0x7fD0<-0xA55A\n", __func__);
-		do {
-			himax_in_parse_assign_cmd(0x10007fd0, tmp_addr, sizeof(tmp_addr));
-			himax_in_parse_assign_cmd(0xA55AA55A, tmp_data, sizeof(tmp_data));
-			g_core_fp.fp_register_write(tmp_addr, DATA_LEN_4, tmp_data, 0);
-			usleep_range(1000, 1001);
-
-			g_core_fp.fp_register_read(tmp_addr, DATA_LEN_4, rec_data, 0);
-				I("%s: Now retry=%d, data=0x%02X%02X%02X%02X\n", __func__, retry,
-			rec_data[3], rec_data[2], rec_data[1], rec_data[0]);
-		} while((retry++ < 10) && (rec_data[3] != 0xA5 && rec_data[2] != 0x5A && rec_data[1] != 0xA5 && rec_data[0] != 0x5A ));
-
-#if defined(HX_ZERO_FLASH)
-		g_core_fp.fp_0f_reload_to_active();
-#endif
-
-#if defined(HX_HIGH_SENSE)
-#ifndef HX_RESUME_SEND_CMD
-		g_core_fp.fp_resend_cmd_func(ts->suspended);
-#endif
-#endif
-		himax_int_enable(1);
-#endif
 		atomic_set(&ts->suspend_mode, 1);
 		ts->pre_finger_mask = 0;
 		FAKE_POWER_KEY_SEND = false;
@@ -4058,8 +3906,8 @@ int _himax_chip_common_suspend(struct himax_ts_data *ts)
 		goto END;
 	}
 
+#endif
 	himax_int_enable(0);
-	himax_rst_gpio_set(ts->rst_gpio, 0);
 	himax_report_all_leave_event(ts);
 	/*if (g_core_fp.fp_suspend_ic_action != NULL)*/
 		/*g_core_fp.fp_suspend_ic_action();*/
@@ -4071,7 +3919,6 @@ int _himax_chip_common_suspend(struct himax_ts_data *ts)
 		if (cancel_state)
 			himax_int_enable(1);
 	}
-#endif
 
 	/*ts->first_pressed = 0;*/
 	atomic_set(&ts->suspend_mode, 1);
@@ -4102,13 +3949,6 @@ int himax_chip_common_suspend(struct himax_ts_data *ts)
 
 int _himax_chip_common_resume(struct himax_ts_data *ts)
 {
-#ifdef HX_112F_SET
-	int retry = 0;
-	uint8_t tmp_addr[DATA_LEN_4] = {0};
-	uint8_t tmp_data[DATA_LEN_4] = {0};
-	uint8_t rec_data[DATA_LEN_4] = {0};
-#endif
-
 #if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 	int result = 0;
 #endif
@@ -4146,46 +3986,22 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 #endif
 #endif
 
-#ifdef HX_112F_SET
-#ifdef HX_SMART_WAKEUP
-	if (ts->SMWP_enable) {
-		I("%s:0x7fD0<-0x00000000\n", __func__);
-		do {
-			himax_in_parse_assign_cmd(0x10007fd0, tmp_addr, sizeof(tmp_addr));
-			himax_in_parse_assign_cmd(0x00000000, tmp_data, sizeof(tmp_data));
-			g_core_fp.fp_register_write(tmp_addr, DATA_LEN_4, tmp_data, 0);
-			usleep_range(1000, 1001);
-
-			g_core_fp.fp_register_read(tmp_addr, DATA_LEN_4, rec_data, 0);
-			I("%s: Now retry=%d, data=0x%02X%02X%02X%02X\n", __func__, retry,
-				rec_data[3], rec_data[2], rec_data[1], rec_data[0]);
-		} while((retry++ < 10) && (rec_data[3] != 0x00 && rec_data[2] != 0x00 && rec_data[1] != 0x00 && rec_data[0] != 0x00 ));
-	}
-#endif
-#endif
-
 #if defined(HX_ZERO_FLASH) && defined(HX_RESUME_SET_FW)
 #ifdef HX_SMART_WAKEUP
 	if (!ts->SMWP_enable) {
 #endif
-		himax_rst_gpio_set(ts->rst_gpio, 1);
-		msleep(2);
-		himax_rst_gpio_set(ts->rst_gpio, 0);
-		msleep(5);
-		himax_rst_gpio_set(ts->rst_gpio, 1);
-		msleep(2);
-		I("It will update fw after resume in zero flash mode!\n");
-		if (g_core_fp.fp_0f_operation_dirly != NULL) {
-			result = g_core_fp.fp_0f_operation_dirly();
-			if (result) {
-				E("Something is wrong! Skip Update with zero flash!\n");
-				goto ESCAPE_0F_UPDATE;
-			}
+	I("It will update fw after resume in zero flash mode!\n");
+	if (g_core_fp.fp_0f_operation_dirly != NULL) {
+		result = g_core_fp.fp_0f_operation_dirly();
+		if (result) {
+			E("Something is wrong! Skip Update with zero flash!\n");
+			goto ESCAPE_0F_UPDATE;
 		}
-		if (g_core_fp.fp_reload_disable != NULL)
-			g_core_fp.fp_reload_disable(0);
-		if (g_core_fp.fp_sense_on != NULL)
-			g_core_fp.fp_sense_on(0x00);
+	}
+	if (g_core_fp.fp_reload_disable != NULL)
+		g_core_fp.fp_reload_disable(0);
+	if (g_core_fp.fp_sense_on != NULL)
+		g_core_fp.fp_sense_on(0x00);
 #ifdef HX_SMART_WAKEUP
 	}
 #endif
@@ -4195,10 +4011,8 @@ int _himax_chip_common_resume(struct himax_ts_data *ts)
 		g_core_fp.fp_resend_cmd_func(ts->suspended);
 
 #ifdef HX_CODE_OVERLAY
-	if (ts->SMWP_enable && ts->in_self_test == 0) {
-		I("%s: enter overlay mode", __func__);
+	if (ts->SMWP_enable && ts->in_self_test == 0)
 		g_core_fp.fp_0f_overlay(3, 0);
-	}
 #endif
 #endif
 	himax_report_all_leave_event(ts);

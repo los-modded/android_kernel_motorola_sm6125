@@ -134,10 +134,6 @@ extern uint8_t himax_int_gpio_read(int pinnum);
 extern int himax_gpio_power_config(struct himax_i2c_platform_data *pdata);
 void himax_gpio_power_deconfig(struct himax_i2c_platform_data *pdata);
 
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-extern int panel_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
-#endif
-
 #if defined(CONFIG_DRM)
 	extern int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 #elif defined(CONFIG_FB)

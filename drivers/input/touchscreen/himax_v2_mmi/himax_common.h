@@ -56,10 +56,6 @@
 	#include <linux/earlysuspend.h>
 #endif
 
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-#include <linux/panel_notifier.h>
-#endif
-
 #ifdef CONFIG_OF
 	#include <linux/of_gpio.h>
 #endif
@@ -176,7 +172,6 @@ struct himax_tap_sensor_platform_data {
 #define HX_83112D_SERIES_PWON		"HX83112D"
 #define HX_83112E_SERIES_PWON		"HX83112E"
 #define HX_83191A_SERIES_PWON		"HX83191A"
-#define HX_83112F_SERIES_PWON		"HX83112f"
 
 #define HX_TP_BIN_CHECKSUM_SW		1
 #define HX_TP_BIN_CHECKSUM_HW		2
@@ -252,22 +247,6 @@ enum cell_type {
 	CHIP_IS_IN_CELL
 };
 #ifdef HX_FIX_TOUCH_INFO
-#ifdef HX_112F_SET
-enum fix_touch_info {
-	FIX_HX_RX_NUM = 36,
-	FIX_HX_TX_NUM = 16,
-	FIX_HX_BT_NUM = 0,
-	FIX_HX_X_RES = 1080,
-	FIX_HX_Y_RES = 2520,
-	FIX_HX_MAX_PT = 10,
-	FIX_HX_XY_REVERSE = false,
-	FIX_HX_INT_IS_EDGE = true,
-#ifdef HX_TP_PROC_2T2R
-	FIX_HX_RX_NUM_2 = 36,
-	FIX_HX_TX_NUM_2 = 16,
-#endif
-};
-#else
 enum fix_touch_info {
 	FIX_HX_RX_NUM = 36,
 	FIX_HX_TX_NUM = 18,
@@ -282,7 +261,6 @@ enum fix_touch_info {
 	FIX_HX_TX_NUM_2 = 18,
 #endif
 };
-#endif
 #endif
 
 #ifdef HX_ZERO_FLASH
@@ -430,9 +408,6 @@ struct himax_ts_data {
 	int (*power)(int on);
 	int pre_finger_data[10][2];
 	bool vdd_1v8_always_on;
-	uint32_t report_gesture_key;
-	uint32_t build_id;
-	uint32_t config_id;
 
 	struct device *dev;
 	struct workqueue_struct *himax_wq;
@@ -466,11 +441,6 @@ struct himax_ts_data {
 	struct early_suspend early_suspend;
 #endif
 
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-	struct notifier_block panel_notif;
-	struct workqueue_struct *himax_panel_wq;
-	struct delayed_work work_panel;
-#endif
 	struct workqueue_struct			*flash_wq;
 	struct work_struct				flash_work;
 
@@ -485,11 +455,7 @@ struct himax_ts_data {
 #endif
 #ifdef HX_RESUME_SET_FW
 	struct workqueue_struct *ts_int_workqueue;
-#if defined(__HIMAX_HX83102D_MOD__)
-	struct delayed_work ts_int_work;
-#else
 	struct work_struct ts_int_work;
-#endif
 #endif
 
 	struct workqueue_struct *himax_diag_wq;
@@ -544,11 +510,6 @@ struct himax_ts_data {
 
 #ifdef HIMAX_V2_SENSOR_EN
 	struct himax_tap_sensor_platform_data *sensor_pdata;
-#ifdef CONFIG_HAS_WAKELOCK
-	struct wake_lock tap_gesture_wakelock;
-#else
-	struct wakeup_source tap_gesture_wakelock;
-#endif
 #endif
 
 };
@@ -578,18 +539,6 @@ void himax_set_SMWP_func(uint8_t SMWP_enable);
 #define GEST_PT_MAX_NUM		(128)
 
 extern uint8_t *wake_event_buffer;
-#endif
-
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-#define register_panel_notifier panel_register_notifier
-#define unregister_panel_notifier panel_unregister_notifier
-enum touch_state {
-	TOUCH_DEEP_SLEEP_STATE = 0,
-	TOUCH_LOW_POWER_STATE,
-};
-#else
-#define register_panel_notifier(...) rc
-#define unregister_panel_notifier(...) rc
 #endif
 
 extern int irq_enable_count;

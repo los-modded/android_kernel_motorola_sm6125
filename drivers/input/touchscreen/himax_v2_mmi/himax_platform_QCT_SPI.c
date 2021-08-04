@@ -196,30 +196,9 @@ int himax_parse_dt(struct himax_ts_data *ts,
 		I(" DT:protocol_type=%d\n", pdata->protocol_type);
 	}
 
-	if (of_property_read_u32(dt, "himax,def-build-id", &ts->build_id)) {
-		ts->build_id = 0;
-		I("himax,build_id undefined.\n");
-	} else {
-		I("himax,build_id=0x%04X\n", ts->build_id);
-	}
-
-	if (of_property_read_u32(dt, "himax,def-config-id", &ts->config_id)) {
-		ts->config_id = 0;
-		I("himax,config_id undefined.\n");
-	} else {
-		I("himax,config_id=0x%04X\n", ts->config_id);
-	}
-
 	ts->vdd_1v8_always_on = of_property_read_bool(dt, "himax,vdd_1v8_always_on");
 	if (ts->vdd_1v8_always_on){
 		I(" DT:vdd_1v8_always_on=%d\n", ts->vdd_1v8_always_on);
-	}
-
-	if (of_property_read_bool(dt, "himax,report_gesture_key")) {
-		I("novatek,report_gesture_key set");
-		ts->report_gesture_key = 1;
-	} else {
-		ts->report_gesture_key = 0;
 	}
 
 	himax_vk_parser(dt, pdata);
@@ -369,38 +348,6 @@ int himax_bus_write_command(uint8_t command, uint8_t toRetry)
 	return himax_bus_write(command, NULL, 0, toRetry);
 }
 
-#ifdef FIX_WVLA
-int himax_bus_master_write(uint8_t *data, uint32_t length, uint8_t toRetry)
-{
-	uint8_t *buf = NULL;
-	struct spi_transfer	t = {
-		.tx_buf	= buf,
-		.len	= length,
-	};
-	struct spi_message	m;
-	int result = 0;
-
-	buf = kcalloc(length, sizeof(uint8_t), GFP_KERNEL);
-	if (buf == NULL) {
-		E("%s, Failed to allocate memory\n", __func__);
-		goto alloc_error;
-	}
-
-	mutex_lock(&(private_ts->spi_lock));
-	memcpy(buf, data, length);
-
-	spi_message_init(&m);
-	spi_message_add_tail(&t, &m);
-	result = himax_spi_sync(private_ts, &m);
-	mutex_unlock(&(private_ts->spi_lock));
-
-alloc_error:
-	if (buf)
-		kfree(buf);
-
-	return result;
-}
-#else
 int himax_bus_master_write(uint8_t *data, uint32_t length, uint8_t toRetry)
 {
 	uint8_t buf[length];
@@ -422,7 +369,6 @@ int himax_bus_master_write(uint8_t *data, uint32_t length, uint8_t toRetry)
 
 	return result;
 }
-#endif
 EXPORT_SYMBOL(himax_bus_master_write);
 
 void himax_int_enable(int enable)
@@ -928,12 +874,7 @@ void himax_resume_thread_func(void)
 {
 	struct himax_ts_data *ts = private_ts;
 	I("%s: TP resume from thread\n", __func__);
-#if defined(__HIMAX_HX83102D_MOD__)
-	queue_delayed_work(ts->ts_int_workqueue,
-				&ts->ts_int_work, msecs_to_jiffies(60));
-#else
 	queue_work(ts->ts_int_workqueue, &ts->ts_int_work);
-#endif
 	return;
 }
 #endif
@@ -995,12 +936,6 @@ int drm_notifier_callback(struct notifier_block *self,
 			}
 #endif
 			break;
-#if defined(__HIMAX_HX83102D_MOD__)
-		case MSM_DRM_BLANK_UNBLANK:
-			D("DRM_EARLY_EVENT_BLANK resume.\n");
-			himax_common_resume(ts->dev);
-			return 0;
-#endif
 		}
 	}
 
@@ -1043,51 +978,6 @@ int fb_notifier_callback(struct notifier_block *self,
 			himax_common_suspend(ts->dev);
 			break;
 		}
-	}
-
-	return 0;
-}
-#endif
-
-#ifdef HIMAX_CONFIG_PANEL_NOTIFICATIONS
-int panel_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
-{
-	struct himax_ts_data *ts =
-	    container_of(self, struct himax_ts_data, panel_notif);
-
-	I("panel  %s\n", __func__);
-	
-	switch (event) {
-	case PANEL_EVENT_PRE_DISPLAY_OFF:
-			I("event=%lu\n", event);
-			if (!ts->initialized)
-				return -ECANCELED;
-			himax_common_suspend(ts->dev);
-#ifdef HIMAX_PALM_SENSOR_EN
-			if (ts->palm_detection_enabled) {
-				I("%s: palm detection is enabled", __func__);
-				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
-			} else {
-				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
-			}
-#endif
-#ifdef HIMAX_V2_SENSOR_EN
-			if (ts->SMWP_enable) {
-				I("%s: tap detection is enabled", __func__);
-				touch_set_state(TOUCH_LOW_POWER_STATE, TOUCH_PANEL_IDX_PRIMARY);
-			} else {
-				touch_set_state(TOUCH_DEEP_SLEEP_STATE, TOUCH_PANEL_IDX_PRIMARY);
-			}
-#endif
-				break;
-
-	case PANEL_EVENT_PANEL_PREPARE:
-			I("event=%lu\n", event);
-			himax_common_resume(ts->dev);
-				break;
-	default:	/* use DEV_TS here to avoid unused variable */
-			I("panel  %s\n", __func__);
-				break;
 	}
 
 	return 0;
@@ -1164,14 +1054,12 @@ int himax_chip_common_remove(struct spi_device *spi)
 	return 0;
 }
 
-#ifndef HX_112F_SET
 static const struct dev_pm_ops himax_common_pm_ops = {
 #if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM))
 	.suspend = himax_common_suspend,
 	.resume  = himax_common_resume,
 #endif
 };
-#endif
 
 #ifdef CONFIG_OF
 static const struct of_device_id himax_match_table[] = {

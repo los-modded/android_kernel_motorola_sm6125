@@ -340,7 +340,7 @@ static int himax_get_rawdata(uint32_t RAW[], uint32_t datalen)
 	for (i = 0; i < ic_data->HX_TX_NUM; i++) {
 		/*PI("TX%2d", i + 1);*/
 		for (j = 0; j < ic_data->HX_RX_NUM; j++) {
-			PD("%5d ", RAW[index]);
+			PI("%5d ", RAW[index]);
 			if (RAW[index] > Max_DATA)
 				Max_DATA = RAW[index];
 
@@ -728,12 +728,6 @@ static uint32_t himax_wait_sorting_mode(uint8_t checktype)
 		g_core_fp.fp_register_read(tmp_addr, 4, tmp_data, false);
 		I(TEMP_LOG, __func__, "0x10007F40",
 			tmp_data[0], tmp_data[1], tmp_data[2], tmp_data[3]);
-#ifdef HX_112F_SET
-		tmp_addr[3] = 0x90; tmp_addr[2] = 0x00;
-		tmp_addr[1] = 0x00; tmp_addr[0] = 0xE8;
-		g_core_fp.fp_register_read(tmp_addr, 4, tmp_data, false);
-		I("%s: 0x900000E8,tmp_data[0]=%x,tmp_data[1]=%x,tmp_data[2]=%x,tmp_data[3]=%x \n", __func__, tmp_data[0], tmp_data[1], tmp_data[2], tmp_data[3]);
-#endif
 		I("Now retry %d times!\n", count++);
 		msleep(50);
 	} while (count < 50);
@@ -1024,22 +1018,11 @@ static uint32_t mpTestFunc(uint8_t checktype, uint32_t datalen)
 {
 	int32_t ret = 0;
 	uint32_t i/*, j*/;
-#ifdef FIX_WVLA
-	uint32_t *RAW;
-#else
 	uint32_t RAW[datalen];
-#endif
-
 	uint16_t palm_num = 0;
 	uint16_t noise_count = 0;
 	int ret_val = -1;
-#ifdef FIX_WVLA
-	RAW = kcalloc(datalen, sizeof(uint32_t), GFP_KERNEL);
-	if (RAW == NULL) {
-		E("%s, Failed to allocate memory\n", __func__);
-		goto alloc_error;
-	}
-#endif
+
 	/*uint16_t* pInspectGridData = &gInspectGridData[0];*/
 	/*uint16_t* pInspectNoiseData = &gInspectNoiseData[0];*/
 	I("Now Check type = %d\n", checktype);
@@ -1081,20 +1064,12 @@ static uint32_t mpTestFunc(uint8_t checktype, uint32_t datalen)
 			break;
 
 		case HIMAX_INSPECTION_RAWDATA:
-			#ifdef HX_112F_SET
-			himax_set_N_frame(NOISEFRAME, checktype);
-			#else
 			himax_set_N_frame(OTHERSFRAME, checktype);
-			#endif
 			ret_val = HX_INSPECT_ERAW;
 			break;
 
 		case HIMAX_INSPECTION_BPN_RAWDATA:
-			#ifdef HX_112F_SET
-			himax_set_N_frame(NOISEFRAME, checktype);
-			#else
 			himax_set_N_frame(OTHERSFRAME, checktype);
-			#endif
 			ret_val = HX_INSPECT_ERAW;
 			break;
 
@@ -1444,11 +1419,6 @@ FAIL_END:
 	I("fail write log\n");
 END_FUNC:
 	hx_test_data_get(RAW, g_start_log, g_rslt_log, checktype);
-#ifdef FIX_WVLA
-alloc_error:
-	if (RAW)
-		kfree(RAW);
-#endif
 
 	return ret_val;
 }
@@ -1705,14 +1675,10 @@ static int himax_parse_criteria_file(void)
 	if (hx_self_test_file_name == NULL) {
 		E("file name is NULL\n");
 		hx_self_test_file_name = kzalloc(80, GFP_KERNEL);
-#if defined(HX_112F_SET)
-		snprintf(hx_self_test_file_name, 60, "%s_hx_criteria.csv", private_ts->pdata->panel_supplier);
-#else
 		if (private_ts->pdata->panel_supplier)
 			snprintf(hx_self_test_file_name, 60, "%s_hx_criteria.csv", private_ts->pdata->panel_supplier);
 		else
 			snprintf(hx_self_test_file_name, 16, "hx_criteria.csv");
-#endif
 		I("%s: Use name %s\n", __func__, hx_self_test_file_name);
 	}
 
@@ -1896,10 +1862,7 @@ static int himax_chip_self_test(void)
 #if defined(HIMAX_V2_MULTI_BIN)||defined(HX_CODE_OVERLAY)
 	uint8_t normalfw[32] = "Himax_firmware.bin";
 	uint8_t mpapfw[32] = "Himax_mpfw.bin";
-#ifndef HX_112F_SET
-	if (private_ts->pdata->panel_supplier)
-#endif
-	{
+	if (private_ts->pdata->panel_supplier) {
 		snprintf(normalfw, 32, "%s_Himax_firmware.bin", private_ts->pdata->panel_supplier);
 		snprintf(mpapfw, 32, "%s_Himax_mpfw.bin", private_ts->pdata->panel_supplier);
 	}
