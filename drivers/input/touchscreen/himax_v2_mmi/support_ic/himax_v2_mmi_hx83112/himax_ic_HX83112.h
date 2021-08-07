@@ -13,9 +13,9 @@
  *  GNU General Public License for more details.
  */
 
-#include "himax_platform.h"
-#include "himax_common.h"
-#include "himax_ic_core.h"
+#include "../../himax_platform.h"
+#include "../../himax_common.h"
+#include "../../himax_ic_core.h"
 #include <linux/slab.h>
 
 #if defined(HX_AUTO_UPDATE_FW) || defined(HX_ZERO_FLASH)

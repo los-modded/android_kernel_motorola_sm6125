@@ -16,7 +16,7 @@
 #ifndef __HIMAX_MODULAR_H__
 #define __HIMAX_MODULAR_H__
 
-#include "himax_modular_table.h"
+#include "../himax_modular_table.h"
 
 static bool (*this_detect_fp)(void);
 

@@ -14,7 +14,7 @@
  */
 
 #include "himax_ic_HX83112.h"
-#include "himax_modular.h"
+#include "../himax_modular.h"
 
 static void hx83112_chip_init(void)
 {
